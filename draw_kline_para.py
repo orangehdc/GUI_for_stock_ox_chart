@@ -16,7 +16,7 @@ def process(line):
     #        date     max     min      up_or_down
 
 
-def draw(table_name):
+def draw(table_name, start_price, unit,the_name):
     
     conn=sqlite3.connect("D:\\demo\\my_db.db")
     cs = conn.cursor()
@@ -24,8 +24,9 @@ def draw(table_name):
     cs.execute( sql)
     recs = cs.fetchall()
     #Info=('Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Adj Close')       
-    current = recs[0][1]
-    biggest=max([line[2] for line in recs])
+    biggest=max([line[2] for line in recs])    
+    '''    
+    current = recs[0][1]        
     smallest=min([line[3] for line in recs])
     
     if 0.02*current>=0.1:
@@ -33,8 +34,10 @@ def draw(table_name):
     else:
         unit=int(50*(0.02)*(current))*0.02
 
-    end_price=biggest+2*unit
+    
     start_price=int(smallest-unit)
+    '''
+    end_price=biggest+2*unit
     recs.reverse()
     for line in recs:
         if line[5]==0:
@@ -126,6 +129,8 @@ def draw(table_name):
     ax.set_xticks(numpy.arange(0,len(x_list)+2,1))
     ax.set_yticks(numpy.arange(start_price,end_price,unit))
     #plt.scatter(x,y)
+    
+    plt.title(the_name)
     plt.xticks(x_list, date_list)
     plt.plot(x1, y1, 'x',mfc='none',markersize=10)
     plt.plot(x2, y2, 'o',mfc='none',markersize=10)

@@ -11,7 +11,9 @@ import Stack_QGraphsView
 import get_stock_name
 import num_to_database
 import sqlite3
-import draw_kline
+#import draw_kline
+import draw_kline_para
+import get_start_and_unit
 #解决打包的中文出错问题
 reload(sys)
 sys.setdefaultencoding( "utf-8" )#if not, fetch should use gbk
@@ -25,12 +27,12 @@ class OptionWidget(QDialog):
         self.setWindowTitle(self.tr(u"股票OX图绘制程序"))                
         #初始化数据库---------------------------        
         conn=sqlite3.connect("D:\\demo\\my_db.db")
-        sql = "CREATE TABLE IF NOT EXISTS name_total ( number char , name nchar )" 
+        sql = "CREATE TABLE IF NOT EXISTS name_total ( number char , name nchar, start real, unit real )" 
         conn.execute( sql )
-        sql="create unique index if not exists idex on name_total(number,name)"
+        sql="create unique index if not exists idex on name_total(number,name,start,unit)"
         conn.execute(sql)        
         cs = conn.cursor()
-        cs.execute( "insert or replace INTO name_total ( number,name ) values('000000','Welcome!')")
+        cs.execute( "insert or replace INTO name_total ( number,name,start,unit ) values('000000','Welcome!',0,0)")
         conn.commit()  #将加入的记录保存到磁盘
 
         #初始化列表---------------------------------
@@ -38,7 +40,7 @@ class OptionWidget(QDialog):
         self.listWidget.insertItem(0,self.tr("000000"))
         cs.execute( "SELECT * FROM name_total ")#打开数据表
         recs = cs.fetchall()#取出所有记录
-        for stock_num,stock_name in recs:
+        for stock_num,stock_name,tmp1,tmp2 in recs:
             if stock_num!='000000':
                 self.listWidget.insertItem(0,self.tr(stock_num))
         cs.close()
@@ -110,12 +112,39 @@ class OptionWidget(QDialog):
         if ok:
             self.unitLabel.setText(str(my_unit))
             
+            row = self.listWidget.currentRow()
+            the_text = self.listWidget.item(row)
+            stock_num=str(the_text.text() )
+            conn=sqlite3.connect("D:\\demo\\my_db.db")
+            cs = conn.cursor()
+            sql='update name_total set unit='+str(my_unit)\
+            + ' where number='+"'"+str(stock_num)+"'"
+            print sql
+            cs.execute(sql)
+            conn.commit()  #将加入的记录保存到磁盘
+            cs.close()
+            conn.close()
+            
+            
     def slotPrice(self):
         my_price,ok=QInputDialog.getDouble(self,self.tr("起始价格"),
                                           self.tr("请输入起始价格:"),
                                           float(self.priceLabel.text()),0,2300.00)
-        if ok:
+        if ok:            
             self.priceLabel.setText(str(my_price))
+            
+            row = self.listWidget.currentRow()
+            the_text = self.listWidget.item(row)
+            stock_num=str(the_text.text() )
+            conn=sqlite3.connect("D:\\demo\\my_db.db")
+            cs = conn.cursor()
+            sql='update name_total set start='+str(my_price)\
+            + ' where number='+"'"+str(stock_num)+"'"
+            print sql
+            cs.execute(sql)
+            conn.commit()  #将加入的记录保存到磁盘
+            cs.close()
+            conn.close()
             
     def add_Item(self):
         '''用getInterger'''
@@ -131,14 +160,22 @@ class OptionWidget(QDialog):
         print stock_name
         conn=sqlite3.connect("D:\\demo\\my_db.db")
         cs = conn.cursor()
-        batch=[(stock_num, unicode(stock_name, "gbk")  )] 
-        cs.executemany( "insert or replace INTO name_total values (?,?) ",batch)
+        batch=[(stock_num, unicode(stock_name, "gbk") ,0,0 )] 
+        cs.executemany( "insert or replace INTO name_total values (?,?,?,?) ",batch)
         conn.commit()  #将加入的记录保存到磁盘
-        cs.close()
-        conn.close()
+        
         if stock_name!="not available":
             num_to_database.set_data(stock_num)
-
+            table_name = 'stock'+str(num)
+            start_price,unit=get_start_and_unit.param(table_name)
+            #print start_price
+            sql='update name_total set start='+str(start_price)\
+            +',unit='+str(unit)+ ' where number='+"'"+str(stock_num)+"'"
+            print sql
+            cs.execute(sql)
+            conn.commit()  #将加入的记录保存到磁盘
+        cs.close()
+        conn.close()
             
     def del_Item(self):
         row = self.listWidget.currentRow()
@@ -154,7 +191,9 @@ class OptionWidget(QDialog):
             conn=sqlite3.connect("D:\\demo\\my_db.db")
             cs = conn.cursor()
             sql="DELETE FROM name_total WHERE number='"+str(item.text())+"'"
-            #@print sql
+            #print sql
+            cs.execute(sql)
+            sql="DROP TABLE IF EXISTS stock"+str(item.text())
             cs.execute(sql)
             conn.commit()  #将加入的记录保存到磁盘
             cs.close()
@@ -163,11 +202,24 @@ class OptionWidget(QDialog):
     
     def show_Item(self):        
         row = self.listWidget.currentRow()
-        item = self.listWidget.item(row)         
-        table_name = 'stock'+str(item.text() )
+        item = self.listWidget.item(row)      
         
+        table_name = 'stock'+str(item.text() )        
         jpg_name = table_name+'.png'
-        draw_kline.draw(table_name)
+    
+        unit= float(self.unitLabel.text())
+        start=float(self.priceLabel.text())
+        
+        stock_num=str(item.text() )
+        conn=sqlite3.connect("D:\\demo\\my_db.db")
+        cs = conn.cursor()
+        query= "SELECT * FROM name_total WHERE number ='"+ stock_num+"'"
+        cs.execute(query )
+        result=cs.fetchall()        
+        the_name=(result)[0][0]
+        print the_name
+        
+        draw_kline_para.draw(table_name,start,unit,the_name)
         dialog = QDialog()
         small_layout=QVBoxLayout()
         #---------------------------               
@@ -183,14 +235,19 @@ class OptionWidget(QDialog):
         stock_num=str(the_text.text() )
         conn=sqlite3.connect("D:\\demo\\my_db.db")
         cs = conn.cursor()
-        query= "SELECT name FROM name_total WHERE number ='"+ stock_num+"'"
-        print query
+        query= "SELECT * FROM name_total WHERE number ='"+ stock_num+"'"
+
         cs.execute(query )
-        the_name=(cs.fetchall())[0][0].decode('utf-8')
-        print the_name
-        self.Information1.setText(the_name )
-        self.unitLabel.setText('0.1')
-        self.priceLabel.setText('10' )
+        result=cs.fetchall()
+        
+        the_name=(result)[0][1].decode('utf-8')               
+        start_price=result[0][2]
+        unit=result[0][3]
+
+        self.Information1.setText(the_name )        
+        self.unitLabel.setText(str(unit))
+        self.priceLabel.setText(str(start_price))
+        
 '''还是用窗口显示图片比较好'''            
         
 if __name__ == "__main__":
